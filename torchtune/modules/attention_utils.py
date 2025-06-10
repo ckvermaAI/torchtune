@@ -24,7 +24,8 @@ if _SUPPORTS_FLEX_ATTENTION:
 
     def compile_flex_attention():
         try:
-            return torch.compile(flex_attention, dynamic=False)
+            print(f"Compiling flex_attention with backend='hpu_backend'.")
+            return torch.compile(flex_attention, dynamic=False, backend="hpu_backend")
         except Exception as e:
             # It may fail on some combinations of hardware/versions. Using max-autotune fixes this issue.
             # Context: https://github.com/pytorch/torchtune/issues/2113
@@ -151,7 +152,7 @@ def packed_block_causal_mask(
     if _SUPPORTS_FLEX_ATTENTION:
         document_ids = _get_document_ids_from_seq_lens(seq_lens)
         batch_size, max_seq_len = document_ids.shape
-        document_ids = document_ids.to("cuda")
+        document_ids = document_ids.to("hpu")
 
         # Instead of passing a tensor mask, flex attention requires a mask_mod function
         # that determines which elements of QK^T should be included in the attention
@@ -176,7 +177,7 @@ def packed_block_causal_mask(
             None,
             max_seq_len,
             max_seq_len,
-            device="cuda",
+            device="hpu",
         )
     else:
         return create_block_causal_mask(seq_lens=seq_lens)
