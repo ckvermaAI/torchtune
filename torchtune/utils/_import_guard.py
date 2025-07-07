@@ -10,7 +10,8 @@ import torch
 
 # We can only use flex attention / BlockMask if torch version >= 2.5.0 and GPU is Turing / SM75 and above
 _SUPPORTS_FLEX_ATTENTION = (
-    torch.cuda.is_available() and torch.cuda.get_device_capability() >= (7, 5)
+    torch.cuda.is_available() and torch.cuda.get_device_capability() >= (7, 5) 
+    or torch.hpu.is_available()
 )
 
 _TORCHDATA_MIN_VERSION = "0.10.0"

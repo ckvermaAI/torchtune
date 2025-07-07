@@ -24,7 +24,7 @@ if _SUPPORTS_FLEX_ATTENTION:
 
     def compile_flex_attention():
         try:
-            return torch.compile(flex_attention)
+            return torch.compile(flex_attention, dynamic=False, backend="hpu_backend")
         except Exception as e:
             # It may fail on some combinations of hardware/versions. Using max-autotune fixes this issue.
             # Context: https://github.com/pytorch/torchtune/issues/2113
@@ -116,6 +116,7 @@ def create_block_causal_mask(seq_lens: list[torch.Tensor]) -> torch.Tensor:
     Returns:
         Tensor: Block causal mask of shape (batch_size, max_seq_len, max_seq_len).
     """
+    print(f"create_block_causal_mask")
     batch_block_attn_masks = []
     batch_size = len(seq_lens)
     for sample_idx in range(batch_size):
@@ -129,6 +130,22 @@ def create_block_causal_mask(seq_lens: list[torch.Tensor]) -> torch.Tensor:
         batch_block_attn_masks.append(torch.block_diag(*block_attn_masks))
     return torch.stack(batch_block_attn_masks)
 
+def create_block_only_causal_mask(seq_lens: list[torch.Tensor]) -> torch.Tensor:
+    print(f"create_block_only_causal_mask")
+    batch_block_attn_masks = []
+    batch_size = len(seq_lens)
+
+    for sample_idx in range(batch_size):
+        seq_len_sum = seq_lens[sample_idx].sum()
+        device = seq_lens[sample_idx].device
+        block_attn_masks = [
+            torch.tril(
+                torch.ones(seq_len_sum, seq_len_sum, dtype=torch.bool, device=device)
+            )
+        ]
+
+        batch_block_attn_masks.append(torch.block_diag(*block_attn_masks))
+    return torch.stack(batch_block_attn_masks)
 
 def packed_block_causal_mask(
     seq_lens: list[torch.Tensor],
@@ -151,7 +168,7 @@ def packed_block_causal_mask(
     if _SUPPORTS_FLEX_ATTENTION:
         document_ids = _get_document_ids_from_seq_lens(seq_lens)
         batch_size, max_seq_len = document_ids.shape
-        document_ids = document_ids.to("cuda")
+        document_ids = document_ids.to("hpu")
 
         # Instead of passing a tensor mask, flex attention requires a mask_mod function
         # that determines which elements of QK^T should be included in the attention
@@ -171,15 +188,17 @@ def packed_block_causal_mask(
             return causal_mask & document_mask
 
         return create_block_causal_mask_flex(
-            mask_mod,
+            causal_mask_flex, #mask_mod,
             batch_size,
             None,
             max_seq_len,
             max_seq_len,
-            device="cuda",
+            device="hpu",
         )
     else:
-        return create_block_causal_mask(seq_lens=seq_lens)
+        # return create_block_causal_mask(seq_lens=seq_lens)
+        return create_block_only_causal_mask(seq_lens=seq_lens)
+
 
 
 def _sdpa_or_flex_attention() -> Callable:
